@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-format:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Run ruff linting
+        run: uv run ruff check .
+
+      - name: Run ruff formatting check
+        run: uv run ruff format --check .
+
+      - name: Run ty type checking
+        run: uv run ty check
+
+      - name: Verify benchmark script syntax
+        run: python3 -m py_compile benchmark_llm.py
+
+      - name: Check src modules syntax
+        run: |
+          python3 -m py_compile src/common/models.py
+          python3 -m py_compile src/common/utils.py
+          python3 -m py_compile src/common/logger.py
+          python3 -m py_compile src/vllm_server/main.py
+          python3 -m py_compile src/tensorrt_llm_server/main.py
+
+      - name: Validate Docker Compose files
+        run: |
+          docker-compose -f docker_composes/docker-compose.vllm.yml config > /dev/null
+          docker-compose -f docker_composes/docker-compose.tensorrt-llm.yml config > /dev/null
