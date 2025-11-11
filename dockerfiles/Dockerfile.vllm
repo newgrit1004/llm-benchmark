@@ -1,0 +1,58 @@
+# vLLM Dockerfile for RTX 5090 with CUDA 12.9
+FROM nvidia/cuda:12.6.3-devel-ubuntu22.04
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    CUDA_HOME=/usr/local/cuda \
+    PATH=/root/.local/bin:$PATH
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3.10 \
+    python3.10-dev \
+    python3-pip \
+    git \
+    curl \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv package manager via pip (더 안정적)
+RUN pip3 install uv
+
+# Set working directory
+WORKDIR /workspace
+
+# Create requirements file for vLLM
+RUN echo "vllm>=0.6.1" > requirements.txt && \
+    echo "torch>=2.5.0" >> requirements.txt && \
+    echo "transformers>=4.45.0" >> requirements.txt && \
+    echo "huggingface-hub>=0.26.0" >> requirements.txt && \
+    echo "numpy>=1.24.0" >> requirements.txt && \
+    echo "fastapi>=0.115.0" >> requirements.txt && \
+    echo "uvicorn>=0.32.0" >> requirements.txt && \
+    echo "requests>=2.32.0" >> requirements.txt && \
+    echo "tqdm>=4.66.0" >> requirements.txt && \
+    echo "pandas>=2.2.0" >> requirements.txt
+
+# Install Python packages using uv
+RUN uv pip install --system -r requirements.txt
+
+# Create directories
+RUN mkdir -p /models /workspace/src
+
+# Copy modular server code
+COPY src/common /workspace/src/common
+COPY src/vllm_server /workspace/src/vllm_server
+
+# Expose vLLM server port
+EXPOSE 8000
+
+# Set default command to run modular vLLM server
+CMD ["python3", "-m", "src.vllm_server.main", \
+     "--model", "/models/Qwen3-8B", \
+     "--host", "0.0.0.0", \
+     "--port", "8000", \
+     "--gpu-memory-utilization", "0.9", \
+     "--dtype", "bfloat16", \
+     "--max-model-len", "8192"]

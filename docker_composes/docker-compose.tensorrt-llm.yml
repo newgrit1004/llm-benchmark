@@ -1,0 +1,51 @@
+services:
+  tensorrt-llm:
+    image: nvcr.io/nvidia/tensorrt-llm/release:1.0.0
+    container_name: tensorrt-llm-benchmark
+    runtime: nvidia
+    stdin_open: true
+    tty: true
+    env_file:
+      - ../.env.benchmark
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=${GPU_DEVICE_ID:-0}
+      - CUDA_VISIBLE_DEVICES=${GPU_DEVICE_ID:-0}
+      - HF_HOME=/cache
+      # RTX 5090 Blackwell 최적화 환경 변수
+      - TENSORRT_OPTIMIZE_LEVEL=3
+      - CUDA_MODULE_LOADING=LAZY
+      - NCCL_P2P_LEVEL=NVL
+      - CUDA_DEVICE_MAX_CONNECTIONS=1
+      # FP4 양자화 활성화 (Blackwell 하드웨어 가속)
+      - TRTLLM_ENABLE_FP4=1
+    volumes:
+      - ${MODELS_PATH:-/home/sewonkim/llm_models}:/models:ro
+      - ../engines:/engines
+      - tensorrt-cache:/cache
+      - ./scripts/tensorrt_startup.sh:/workspace/tensorrt_startup.sh:ro
+    ports:
+      - "${TENSORRT_PORT:-8001}:${TENSORRT_PORT:-8001}"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+    shm_size: '16gb'
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    command: /bin/bash /workspace/tensorrt_startup.sh
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
+    restart: unless-stopped
+
+volumes:
+  tensorrt-cache:
+    driver: local

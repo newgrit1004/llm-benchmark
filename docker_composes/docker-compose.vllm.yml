@@ -1,0 +1,48 @@
+services:
+  vllm:
+    build:
+      context: ..
+      dockerfile: dockerfiles/Dockerfile.vllm
+    image: llm-benchmark/vllm:latest
+    container_name: vllm-benchmark
+    runtime: nvidia
+    env_file:
+      - ../.env.benchmark
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=${GPU_DEVICE_ID:-0}
+      - CUDA_VISIBLE_DEVICES=${GPU_DEVICE_ID:-0}
+      - HF_HOME=/cache
+    volumes:
+      - ${MODELS_PATH:-/home/sewonkim/llm_models}:/models:ro
+      - vllm-cache:/cache
+    ports:
+      - "${VLLM_PORT:-8000}:${VLLM_PORT:-8000}"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['${GPU_DEVICE_ID:-0}']
+              capabilities: [gpu]
+    shm_size: '16gb'
+    command: >
+      python3 -m vllm.entrypoints.openai.api_server
+      --model ${MODEL_DIR:-/models/Qwen3-8B}
+      --host ${SERVER_HOST:-0.0.0.0}
+      --port ${VLLM_PORT:-8000}
+      --gpu-memory-utilization ${GPU_MEMORY_UTILIZATION:-0.9}
+      --dtype ${DTYPE:-bfloat16}
+      --max-model-len ${MAX_INPUT_LEN:-4096}
+      --max-num-seqs ${VLLM_MAX_NUM_SEQS:-32}
+      --disable-log-requests
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    restart: unless-stopped
+
+volumes:
+  vllm-cache:
+    driver: local
